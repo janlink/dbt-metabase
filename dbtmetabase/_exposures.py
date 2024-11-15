@@ -25,7 +25,7 @@ from .manifest import Manifest
 _RESOURCE_VERSION = 2
 
 # Extracting table in `from` and `join` clauses (won't recognize some valid SQL, e.g. `from "table with spaces"`)
-_EXPOSURE_PARSER = re.compile(r"[FfJj][RrOo][OoIi][MmNn]\s+([\w.\"]+)")
+_EXPOSURE_PARSER = re.compile(r"[FfJj][RrOo][OoIi][MmNn]\s+([\w.\"`]+)")
 _CTE_PARSER = re.compile(
     r"[Ww][Ii][Tt][Hh]\s+\b(\w+)\b\s+as|[)]\s*[,]\s*\b(\w+)\b\s+as"
 )
@@ -79,7 +79,7 @@ class ExposuresMixin(metaclass=ABCMeta):
         models = self.manifest.read_models()
 
         ctx = self.__Context(
-            model_refs={m.name.lower(): m.ref for m in models if m.ref},
+            model_refs={m.alias.lower(): m.ref for m in models if m.ref},
             table_names={t["id"]: t["name"] for t in self.metabase.get_tables()},
         )
 
@@ -112,6 +112,8 @@ class ExposuresMixin(metaclass=ABCMeta):
                 depends = set()
                 native_query = ""
                 header = ""
+                average_query_time = None
+                last_used_at = None
 
                 entity: Mapping
                 if item["model"] == "card":
@@ -128,6 +130,13 @@ class ExposuresMixin(metaclass=ABCMeta):
                     result = self.__extract_card_exposures(ctx, card=entity)
                     depends.update(result["depends"])
                     native_query = result["native_query"]
+
+                    average_query_time_ms = entity.get("average_query_time")
+                    if average_query_time_ms:
+                        average_query_time_s = average_query_time_ms / 1000
+                        average_query_time = f"{(average_query_time_s // 60):.0f}:{(average_query_time_s % 60):06.3f}"
+
+                    last_used_at = entity.get("last_used_at")
 
                 elif item["model"] == "dashboard":
                     dashboard_entity = self.metabase.find_dashboard(uid=item["id"])
@@ -190,6 +199,8 @@ class ExposuresMixin(metaclass=ABCMeta):
                             created_at=entity["created_at"],
                             creator_name=creator_name or "",
                             creator_email=creator_email or "",
+                            last_used_at=last_used_at,
+                            average_query_time=average_query_time,
                             native_query=native_query,
                             depends_on=sorted(
                                 [
@@ -310,6 +321,8 @@ class ExposuresMixin(metaclass=ABCMeta):
         created_at: str,
         creator_name: str,
         creator_email: str,
+        last_used_at: Optional[str],
+        average_query_time: Optional[str],
         native_query: Optional[str],
         depends_on: Iterable[str],
         tags: Optional[Sequence[str]],
@@ -361,6 +374,14 @@ class ExposuresMixin(metaclass=ABCMeta):
             },
             "depends_on": list(depends_on),
         }
+
+        meta = {}
+        if average_query_time:
+            meta["average_query_time"] = average_query_time
+        if last_used_at:
+            meta["last_used_at"] = last_used_at
+        if meta:
+            exposure["meta"] = meta
 
         if tags:
             exposure["tags"] = list(tags)
