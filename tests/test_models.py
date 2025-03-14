@@ -1,4 +1,4 @@
-from collections.abc import MutableSequence
+from collections.abc import MutableMapping, MutableSequence
 from typing import cast
 from unittest.mock import Mock
 
@@ -279,3 +279,58 @@ def test_multi_database_foreign_key_resolution():
 
     field = ctx.get_field("MY_DATABASE.SILVER.ORDERS", "USER_ID")
     assert field["id"] == 2
+
+
+def test_mark_non_dbt_tables_as_cruft(
+    core: MockDbtMetabase, monkeypatch: pytest.MonkeyPatch
+):
+    core._manifest._models = [
+        Model(
+            database="dbtmetabase",
+            schema="public",
+            group=Group.nodes,
+            name="dbt_table",
+            alias="dbt_table",
+            description="",
+            columns=[],
+        )
+    ]
+
+    tables: MutableMapping[str, MutableMapping] = {
+        "DBTMETABASE.PUBLIC.DBT_TABLE": {
+            "kind": "table",
+            "id": 1,
+            "name": "dbt_table",
+            "schema": "PUBLIC",
+            "visibility_type": None,
+            "fields": {},
+        },
+        "DBTMETABASE.PUBLIC.NON_DBT_TABLE": {
+            "kind": "table",
+            "id": 2,
+            "name": "non_dbt_table",
+            "schema": "PUBLIC",
+            "visibility_type": None,
+            "fields": {},
+        },
+    }
+
+    import dbtmetabase._models as models_mod
+
+    monkeypatch.setattr(models_mod, "_build_tables", lambda metadata: tables)
+
+    core.export_models(
+        metabase_database="dbtmetabase",
+        sync_timeout=0,
+        mark_non_dbt_tables_as_cruft=False,
+    )
+    assert tables["DBTMETABASE.PUBLIC.DBT_TABLE"]["visibility_type"] is None
+    assert tables["DBTMETABASE.PUBLIC.NON_DBT_TABLE"]["visibility_type"] is None
+
+    core.export_models(
+        metabase_database="dbtmetabase",
+        sync_timeout=0,
+        mark_non_dbt_tables_as_cruft=True,
+    )
+    assert tables["DBTMETABASE.PUBLIC.DBT_TABLE"]["visibility_type"] is None
+    assert tables["DBTMETABASE.PUBLIC.NON_DBT_TABLE"]["visibility_type"] == "cruft"
