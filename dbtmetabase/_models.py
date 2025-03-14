@@ -42,6 +42,7 @@ class ModelsMixin(metaclass=ABCMeta):
         append_tags: bool = False,
         docs_url: Optional[str] = None,
         order_fields: bool = False,
+        mark_non_dbt_tables_as_cruft: bool = False,
     ):
         """Exports dbt models to Metabase database schema.
 
@@ -55,6 +56,7 @@ class ModelsMixin(metaclass=ABCMeta):
             append_tags (bool, optional): Append dbt tags to table descriptions. Defaults to False.
             docs_url (Optional[str], optional): URL for dbt docs hosting, to append model links to table descriptions. Defaults to None.
             order_fields (bool, optional): Preserve column order in dbt project.
+            mark_non_dbt_tables_as_cruft (bool, optional): Mark tables not in dbt manifest as cruft. Defaults to False.
         """
 
         ctx = _Context()
@@ -122,6 +124,27 @@ class ModelsMixin(metaclass=ABCMeta):
 
         if not synced and sync_timeout:
             raise MetabaseStateError("Unable to sync models with Metabase")
+
+        # Get list of tables that exist in dbt manifest
+        dbt_tables = {
+            f"{model.schema}.{model.alias}".upper()
+            for model in models
+        }
+
+        # Mark non-dbt tables as cruft if enabled
+        if mark_non_dbt_tables_as_cruft:
+            for table_key, table in tables.items():
+                if (
+                    table_key not in dbt_tables and
+                    table.get("visibility_type") != "cruft"
+                ):
+                    _logger.info(
+                        "Marking table '%s' as cruft - not in dbt manifest",
+                        table_key
+                    )
+                    table["visibility_type"] = "cruft"
+                    body_table = {"visibility_type": "cruft"}
+                    ctx.update(entity=table, change=body_table, label=table_key)
 
         for model in models:
             success &= self._export_model(
