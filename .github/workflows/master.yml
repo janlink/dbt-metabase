@@ -6,7 +6,7 @@ on:
       - master
   release:
     types:
-      - created
+      - released
 
 jobs:
   build:
@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.8"
+          python-version: "3.9"
 
       - name: Install uv
         run: pipx install uv
@@ -27,6 +27,8 @@ jobs:
         run: make dependencies
 
       - name: Build
+        env:
+          SETUPTOOLS_SCM_PRETEND_VERSION: ${{ github.event.release.tag_name }}
         run: make build
 
       - name: Publish a Python distribution to PyPI

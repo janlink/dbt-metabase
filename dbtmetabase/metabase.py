@@ -95,9 +95,13 @@ class Metabase:
 
         return response_json
 
+    def get_databases(self) -> Sequence[Mapping]:
+        """Retrieves all databases."""
+        return list(self._api("get", "/api/database"))
+
     def find_database(self, name: str) -> Optional[Mapping]:
         """Finds database by name attribute or returns none."""
-        for api_database in list(self._api("get", "/api/database")):
+        for api_database in self.get_databases():
             if api_database["name"].upper() == name.upper():
                 return api_database
         return None
@@ -118,7 +122,12 @@ class Metabase:
 
     def get_tables(self) -> Sequence[Mapping]:
         """Retrieves all tables for all databases."""
-        return list(self._api("get", "/api/table"))
+        return list(
+            filter(
+                lambda x: "details" in x["db"],  # exclude internal
+                self._api("get", "/api/table"),
+            )
+        )
 
     def get_collections(self, exclude_personal: bool) -> Sequence[Mapping]:
         """Retrieves all collections and optionally filters out personal collections."""

@@ -1,16 +1,7 @@
 from typing import MutableSequence, cast
 
-import pytest
-
 from dbtmetabase.manifest import Column
 from tests._mocks import MockDbtMetabase
-
-
-@pytest.fixture(name="core")
-def fixture_core() -> MockDbtMetabase:
-    c = MockDbtMetabase()
-    c._ModelsMixin__SYNC_PERIOD = 1  # type: ignore
-    return c
 
 
 def test_export(core: MockDbtMetabase):
@@ -89,7 +80,7 @@ def test_build_lookups(core: MockDbtMetabase):
         "INVENTORY.SKUS": {"SKU_ID", "PRODUCT"},
     }
 
-    actual_tables = core._ModelsMixin__get_tables(database_id="2")  # type: ignore
+    actual_tables = core._get_metabase_tables(database_id="2")
 
     assert set(actual_tables.keys()) == set(expected.keys())
 

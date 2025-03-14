@@ -7,6 +7,7 @@ import re
 from enum import Enum
 from pathlib import Path
 from typing import (
+    Any,
     Iterable,
     Mapping,
     MutableMapping,
@@ -26,6 +27,7 @@ _META_NS = "metabase"
 _COMMON_META_FIELDS = [
     "display_name",
     "visibility_type",
+    "description",
 ]
 # Must be covered by Column attributes
 _COLUMN_META_FIELDS = _COMMON_META_FIELDS + [
@@ -33,6 +35,7 @@ _COLUMN_META_FIELDS = _COMMON_META_FIELDS + [
     "has_field_values",
     "coercion_strate`gy",
     "number_style",
+    "decimals",
 ]
 # Must be covered by Model attributes
 _MODEL_META_FIELDS = _COMMON_META_FIELDS + [
@@ -40,11 +43,14 @@ _MODEL_META_FIELDS = _COMMON_META_FIELDS + [
     "caveats",
 ]
 
-# Default model schema (only schema in BigQuery)
+# Default values for non-standard sources
+DEFAULT_DATABASE = ""
 DEFAULT_SCHEMA = "PUBLIC"
 
 # Foreign key constraint: "schema.model (column)" / "model (column)"
 _CONSTRAINT_FK_PARSER = re.compile(r"(?P<model>.+)\s+\((?P<column>.+)\)")
+# Ref parser: "ref('model')"
+_REF_PARSER = re.compile(r"ref\('(?P<model>.+)'\)")
 
 
 class Manifest:
@@ -110,6 +116,13 @@ class Manifest:
             for column in manifest_model.get("columns", {}).values()
         ]
 
+        meta = self._scan_fields(
+            manifest_model.get("meta", {}),
+            fields=_MODEL_META_FIELDS,
+            ns=_META_NS,
+        )
+        description = meta.pop("description", manifest_model.get("description"))
+
         return Model(
             database=database,
             schema=schema,
@@ -118,16 +131,12 @@ class Manifest:
             alias=manifest_model.get(
                 "alias", manifest_model.get("identifier", manifest_model["name"])
             ),
-            description=manifest_model.get("description"),
+            description=description,
             columns=columns,
             unique_id=unique_id,
             source=source,
             tags=manifest_model.get("tags", []),
-            **self._scan_fields(
-                manifest_model.get("meta", {}),
-                fields=_MODEL_META_FIELDS,
-                ns=_META_NS,
-            ),
+            **meta,
         )
 
     def _read_column(
@@ -136,14 +145,17 @@ class Manifest:
         schema: str,
         relationship: Optional[Mapping],
     ) -> Column:
+        meta = self._scan_fields(
+            manifest_column.get("meta", {}),
+            fields=_COLUMN_META_FIELDS,
+            ns=_META_NS,
+        )
+        description = meta.pop("description", manifest_column.get("description"))
+
         column = Column(
             name=manifest_column.get("name", ""),
-            description=manifest_column.get("description"),
-            **self._scan_fields(
-                manifest_column.get("meta", {}),
-                fields=_COLUMN_META_FIELDS,
-                ns=_META_NS,
-            ),
+            description=description,
+            **meta,
         )
 
         self._set_column_relationship(
@@ -280,17 +292,33 @@ class Manifest:
                     column.semantic_type = "type/PK"
 
             elif constraint["type"] == "foreign_key":
-                constraint_expr = constraint.get("expression", "")
-                constraint_fk = _CONSTRAINT_FK_PARSER.search(constraint_expr)
-                if constraint_fk:
-                    fk_target_table = constraint_fk.group("model")
-                    fk_target_field = constraint_fk.group("column")
-                else:
-                    _logger.warning(
-                        "Unparsable '%s' foreign key constraint: %s",
-                        column.name,
-                        constraint_expr,
-                    )
+                # Constraint: expression
+                if constraint_expr := constraint.get("expression"):
+                    constraint_fk = _CONSTRAINT_FK_PARSER.search(constraint_expr)
+                    if constraint_fk:
+                        fk_target_table = constraint_fk.group("model")
+                        fk_target_field = constraint_fk.group("column")
+                    else:
+                        _logger.warning(
+                            "Unparsable '%s' foreign key constraint: %s",
+                            column.name,
+                            constraint_expr,
+                        )
+
+                # Constraint: to + to_columns
+                elif constraint_to := constraint.get("to"):
+                    constraint_fk = _REF_PARSER.search(constraint_to)
+                    constraint_to_columns = constraint.get("to_columns", [])
+                    if constraint_fk and len(constraint_to_columns) == 1:
+                        fk_target_table = constraint_fk.group("model")
+                        fk_target_field = constraint_to_columns[0]
+                    else:
+                        _logger.warning(
+                            "Unparsable '%s' foreign key constraint: %s, %s",
+                            column.name,
+                            constraint_to,
+                            constraint_to_columns,
+                        )
 
         # Precedence 3: Meta fields
         meta = manifest_column.get("meta", {})
@@ -320,12 +348,14 @@ class Manifest:
         )
 
     @staticmethod
-    def _scan_fields(t: Mapping, fields: Iterable[str], ns: str) -> Mapping:
+    def _scan_fields(
+        t: Mapping, fields: Iterable[str], ns: str
+    ) -> MutableMapping[str, Any]:
         """Reads meta fields from a schem object.
 
         Args:
             t (Mapping): Target to scan for fields.
-            fields (List): List of fields to accept.
+            fields (Iterable): List of fields to accept.
             ns (str): Field namespace (separated by .).
 
         Returns:
@@ -364,6 +394,7 @@ class Column:
     has_field_values: Optional[str] = None
     coercion_strategy: Optional[str] = None
     number_style: Optional[str] = None
+    decimals: Optional[int] = None
 
     fk_target_table: Optional[str] = None
     fk_target_field: Optional[str] = None
@@ -398,6 +429,16 @@ class Model:
         elif self.group == Group.sources:
             return f"source('{self.source}', '{self.name}')"
         return None
+
+    @property
+    def alias_path(self) -> str:
+        return ".".join(
+            [
+                self.database or DEFAULT_DATABASE,
+                self.schema or DEFAULT_SCHEMA,
+                self.alias,
+            ]
+        )
 
     def format_description(
         self,
