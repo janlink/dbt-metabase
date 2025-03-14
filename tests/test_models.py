@@ -1,6 +1,6 @@
-from typing import MutableSequence, cast
+from typing import MutableMapping, MutableSequence, cast
 
-from dbtmetabase.manifest import Column
+from dbtmetabase.manifest import Column, Model, Group
 from tests._mocks import MockDbtMetabase
 
 
@@ -86,3 +86,51 @@ def test_build_lookups(core: MockDbtMetabase):
 
     for table, columns in expected.items():
         assert set(actual_tables[table]["fields"].keys()) == columns, f"table: {table}"
+
+
+def test_mark_non_dbt_tables_as_cruft(core: MockDbtMetabase):
+    # Add a fake non-dbt table to the manifest
+    core._manifest._models = [
+        Model(
+            database="dbtmetabase",
+            schema="public",
+            group=Group.nodes,
+            name="dbt_table",
+            alias="dbt_table",
+            description="",
+            columns=[]
+        )
+    ]
+
+    # Mock Metabase tables
+    tables: MutableMapping[str, MutableMapping] = {
+        "PUBLIC.DBT_TABLE": {
+            "kind": "table",
+            "id": 1,
+            "visibility_type": None
+        },
+        "PUBLIC.NON_DBT_TABLE": {
+            "kind": "table",
+            "id": 2,
+            "visibility_type": None
+        }
+    }
+    core._get_metabase_tables = lambda _: tables
+
+    # Test with feature disabled - no tables should be marked as cruft
+    core.export_models(
+        metabase_database="dbtmetabase",
+        sync_timeout=0,
+        mark_non_dbt_tables_as_cruft=False
+    )
+    assert tables["PUBLIC.DBT_TABLE"]["visibility_type"] is None
+    assert tables["PUBLIC.NON_DBT_TABLE"]["visibility_type"] is None
+
+    # Test with feature enabled - only non-dbt table should be marked as cruft
+    core.export_models(
+        metabase_database="dbtmetabase",
+        sync_timeout=0,
+        mark_non_dbt_tables_as_cruft=True
+    )
+    assert tables["PUBLIC.DBT_TABLE"]["visibility_type"] is None
+    assert tables["PUBLIC.NON_DBT_TABLE"]["visibility_type"] == "cruft"

@@ -178,7 +178,9 @@ Tables support the following:
 * `technical`
 * `cruft`
 
-If you notice any changes to these, please submit a pull request with an update.
+You can also use `--mark-non-dbt-tables-as-cruft` with the `models` command to automatically mark any tables in Metabase that are not present in your dbt manifest as `cruft`. This is useful for maintaining a clean interface by hiding tables that are not actively managed by dbt.
+
+If you notice any changes to these visibility types, please submit a pull request with an update.
 
 ### Other Meta Fields
 
