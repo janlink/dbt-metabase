@@ -39,6 +39,7 @@ class ModelsMixin(metaclass=ABCMeta):
         schema_filter: Filter | None = None,
         model_filter: Filter | None = None,
         skip_sources: bool = False,
+        skip_seeds: bool = False,
         sync_timeout: int = DEFAULT_MODELS_SYNC_TIMEOUT,
         append_tags: bool = False,
         docs_url: str | None = None,
@@ -73,6 +74,7 @@ class ModelsMixin(metaclass=ABCMeta):
             schema_filter=schema_filter,
             model_filter=model_filter,
             skip_sources=skip_sources,
+            skip_seeds=skip_seeds,
         )
 
         self.metabase.sync_database_schema(database["id"])
@@ -483,10 +485,12 @@ def _filtered_models(
     schema_filter: Filter | None,
     model_filter: Filter | None,
     skip_sources: bool,
+    skip_seeds: bool,
 ) -> Iterable[Model]:
     def selected(m: Model) -> bool:
         return (
             (not skip_sources or m.group != Group.sources)
+            and (not skip_seeds or m.group != Group.seeds)
             and (not database_filter or database_filter.match(m.database))
             and (not schema_filter or schema_filter.match(m.schema))
             and (not model_filter or model_filter.match(m.name))

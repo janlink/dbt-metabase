@@ -73,15 +73,14 @@ class Manifest:
         models: MutableSequence[Model] = []
 
         for node in manifest["nodes"].values():
-            if node["resource_type"] != "model":
-                continue
-
-            name = node["name"]
-            if node["config"]["materialized"] == "ephemeral":
-                _logger.debug("Skipping ephemeral model '%s'", name)
-                continue
-
-            models.append(self._read_model(manifest, node, Group.nodes))
+            if node["resource_type"] == "model":
+                name = node["name"]
+                if node["config"]["materialized"] == "ephemeral":
+                    _logger.debug("Skipping ephemeral model '%s'", name)
+                    continue
+                models.append(self._read_model(manifest, node, Group.nodes))
+            elif node["resource_type"] == "seed":
+                models.append(self._read_model(manifest, node, Group.seeds))
 
         for node in manifest["sources"].values():
             if node["resource_type"] != "source":
@@ -373,6 +372,7 @@ class Manifest:
 class Group(str, Enum):
     nodes = "nodes"
     sources = "sources"
+    seeds = "seeds"
 
     @staticmethod
     def from_unique_id(unique_id: str) -> Group | None:
@@ -381,6 +381,8 @@ class Group(str, Enum):
             return Group.sources
         elif prefix == "model":
             return Group.nodes
+        elif prefix == "seed":
+            return Group.seeds
         return None
 
 

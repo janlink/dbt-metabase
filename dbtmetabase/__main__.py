@@ -282,6 +282,13 @@ def _add_setup(func: Callable) -> Callable:
     help="Exclude dbt sources from export.",
 )
 @click.option(
+    "--skip-seeds",
+    envvar="SKIP_SEEDS",
+    show_envvar=True,
+    is_flag=True,
+    help="Exclude dbt seeds from export.",
+)
+@click.option(
     "--append-tags",
     envvar="APPEND_TAGS",
     show_envvar=True,
@@ -312,6 +319,7 @@ def models(
     include_models: Sequence[str] | None,
     exclude_models: Sequence[str] | None,
     skip_sources: bool,
+    skip_seeds: bool,
     sync_timeout: int,
     append_tags: bool,
     docs_url: str | None,
@@ -324,6 +332,7 @@ def models(
         schema_filter=Filter(include=include_schemas, exclude=exclude_schemas),
         model_filter=Filter(include=include_models, exclude=exclude_models),
         skip_sources=skip_sources,
+        skip_seeds=skip_seeds,
         sync_timeout=sync_timeout,
         append_tags=append_tags,
         docs_url=docs_url,
