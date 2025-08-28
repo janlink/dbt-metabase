@@ -100,6 +100,25 @@ Open Metabase and go to Settings > Admin Settings > Table Metadata, you will not
 
 Try running `dbt-metabase models --help` to see all the options available for fine tuning.
 
+#### Including or Excluding dbt Seeds
+
+dbt-metabase can synchronize dbt seeds into Metabase, treating them similarly to models. To control their inclusion, use the new `--skip-seeds` option:
+
+```bash
+dbt-metabase models \
+    --manifest-path target/manifest.json \
+    --metabase-url https://metabase.example.com \
+    --metabase-api-key mb_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX= \
+    --metabase-database business \
+    --include-schemas public \
+    --skip-seeds
+```
+
+- By default, seeds are included in the export.
+- Use `--skip-seeds` to exclude dbt seeds from synchronization.
+- You can also set the environment variable `SKIP_SEEDS=true` to achieve the same effect.
+
+
 ### Foreign Keys
 
 Native [relationship tests](https://docs.getdbt.com/reference/resource-properties/data-tests#relationships) and [column-level constraints](https://docs.getdbt.com/reference/resource-properties/constraints#defining-constraints) are the recommended ways of defining foreign keys, however you can override them with `fk_target_table` and `fk_target_field` meta fields. If both are set for a column, meta fields take precedence.
