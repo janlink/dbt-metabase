@@ -240,9 +240,9 @@ def test_multi_database_model_matching():
             assert table_key == f"{schema_name}.{model_name}"
 
 
-@pytest.mark.parametrize("engine", ["mysql", "mariadb"])
+@pytest.mark.parametrize("engine", ["mysql", "mariadb", "starrocks"])
 def test_mysql_like_default_schema_fallback(engine: str):
-    """MySQL/MariaDB JDBC reports schema as empty; fall back to details.dbname."""
+    """MySQL/MariaDB/StarRocks report schema as empty; fall back to details.dbname."""
 
     metadata = {
         "engine": engine,
